@@ -161,7 +161,7 @@ class AIService {
   /**
    * 이미지 분석 함수
    */
-  async analyzeImage(imageUrl, prompt = "이 이미지에 대해 설명해주세요.") {
+  async analyzeImage(imageUrl, prompt = "이 이미지에 대해 설명해주세요.", mimeType = null) {
     try {
       const axios = require('axios');
       
@@ -172,23 +172,22 @@ class AIService {
       // 이미지를 base64로 변환
       const base64Image = imageBuffer.toString('base64');
       
-      // Gemini API 호출
+      // Gemini API 호출 (올바른 이미지 포맷)
       const result = await axios.post(
         `${this.baseUrl}/models/${this.flashModelName}:generateContent`,
         {
           contents: [{
-            parts: [{
-              text: `
-다음 이미지를 분석해주세요.
-
-이미지 URL: ${imageUrl}
-
-이미지 데이터 (Base64):
-${base64Image}
-
-${prompt}
-`
-            }]
+            parts: [
+                             {
+                 "inline_data": {
+                   "mime_type": mimeType || response.headers['content-type'] || "image/jpeg",
+                   "data": base64Image
+                 }
+               },
+              {
+                "text": prompt
+              }
+            ]
           }]
         },
         {
@@ -361,18 +360,21 @@ ${JSON.stringify(userData, null, 2)}
   }
 
   /**
-   * REST API로 직접 호출하는 응답 생성 함수
+   * REST API로 직접 호출하는 응답 생성 함수 (대화 히스토리 지원)
    */
-  async generateResponse(prompt, useProModel = false) {
+  async generateResponse(contentsOrPrompt, useProModel = false) {
     const modelName = useProModel ? this.proModelName : this.flashModelName;
+    
+    // contents 배열인지 단일 prompt인지 판단
+    const contents = Array.isArray(contentsOrPrompt) 
+      ? contentsOrPrompt 
+      : [{ parts: [{ text: contentsOrPrompt }] }];
     
     try {
       const response = await axios.post(
         `${this.baseUrl}/models/${modelName}:generateContent`,
         {
-          contents: [{
-            parts: [{ text: prompt }]
-          }]
+          contents: contents
         },
         {
           headers: {

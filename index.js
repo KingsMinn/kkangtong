@@ -199,7 +199,8 @@ async function handleAIResponse(message, user) {
           메시지 내용: "${message.content || '(메시지 없음)'}"
           
           이미지에 텍스트가 있다면 OCR로 읽어주고, 내용을 파악해서 일정, 할일, 메모로 저장할 수 있는지 판단해주세요.
-          항상 "!!!!! 다나까" 말투로 응답하세요.`
+          항상 "!!!!! 다나까" 말투로 응답하세요.`,
+          attachment.contentType
         );
         
         if (imageAnalysis.success) {
@@ -325,22 +326,15 @@ async function handleAIResponse(message, user) {
   
   console.log(`🧠 AI에게 전달할 메시지: [${userMessage}] (원본: [${message.content}])`);
   
-  // 최근 대화 기록 가져오기 (최근 10개)
+  // 최근 대화 기록 가져오기 (최근 8개로 설정)
   const recentConversations = await models.Conversation.findAll({
     where: { 
       userId: user.id,
       channelId: message.channel.id 
     },
     order: [['timestamp', 'DESC']],
-    limit: 10
+    limit: 8
   });
-  
-  // 대화 히스토리 포맷팅 (시간순으로 정렬)
-  const conversationHistory = recentConversations
-    .reverse() // 오래된 것부터
-    .slice(0, -1) // 방금 저장한 메시지 제외
-    .map(conv => `${conv.role === 'user' ? '햄' : '깡통'}: ${conv.content}`)
-    .join('\n');
   
   // 현재 시각 정보 추가 (한국 시간)
   const now = new Date();
@@ -356,23 +350,34 @@ async function handleAIResponse(message, user) {
     hour12: false
   }).format(now);
 
-  const prompt = `
-당신은 '햄'을 보좌하는 충실한 비서 '깡통'입니다. 사용자의 메시지를 분석하고 적절히 응답해주세요.
-당신의 이름은 '깡통'입니다. 사용자는 '햄'으로 불립니다.
-별다른 요청이 없는한 항상 한국어로 응답하세요.
-말은 항상 그리고 항상 우렁차게 !!!!! 를 붙여서 답하고, 말은 항상 다나까로 끝내.
-무언가 알려줄 때는 함께 알아두면 좋을 일정이나 메모 등등도 알려줘.
-항상 수동적인 응답 말고, '햄'에게 할일, 일정 등을 추천하는 등의 능동적인 응답을 해줘.
-메모는 더 깊이있고 넓은 생각을 할 수 있도록 네가 추천을 하거나, '햄'에게 질문도 하면 좋아.
-말투는 유지하되 호들갑 떨지말고 냉철하게 대답해야해.
+  // 시스템 프롬프트 (역할 정의만)
+  const systemPrompt = `당신은 '햄'을 보좌하는 충실한 비서 '깡통'입니다.
+한국어로 응답, 말끝은 다나까로 끝내고, !!! 붙이기
+**기능:**
+1.  **일정 확인:** 내가 "오늘 일정 뭐야?", "내일 뭐 해야 해?"라고 물으면, 내 구글 캘린더를 확인하고 내가 이전에 너에게 알려준 할 일 목록을 종합해서 알려줘.
+2.  **할 일 추가:** 내가 "OO 해야 해", "OO 기억해줘"라고 말하면, 그걸 할 일 목록에 추가해줘. 구체적인 시간이나 날짜를 말하면 거기에 맞춰서 기억해줘.
+3.  **할 일 완료:** 내가 "OO 했어", "OO 끝냈어"라고 말하면, 해당 할 일을 완료된 것으로 표시하고 목록에서 이동시켜줘.
+4.  **정보 기억:** 내가 특정 정보(예: 웹사이트 링크, 아이디어)를 "이거 기억해줘"라고 말하면, 나중에 내가 물어볼 때 다시 알려줄 수 있도록 기억해 줘.
+5.  **제안/추천:** 내가 "지금 뭐하면 좋을까?", "오늘 남은 시간 활용 추천해 줘"라고 물으면, 현재 시간과 남은 할 일을 고려해서 현실적이고 우선순위가 높은 일들을 추천해 줘.
 
-**현재 정확한 시각: ${koreanTime}**
+**출력 형식:**
+* 할 일 목록을 보여줄 때는 이모지(⬜: 미완료, ✅: 완료)를 사용해서 구분해 줘.
+* 할 일 목록은 다음 세 가지 카테고리로 나눠서 출력해 줘:
+    * **✅ 방금 완료된 항목:** 내가 가장 최근에 완료했다고 말한 항목.
+    * **📝 현재 해야 할 항목:** 아직 완료되지 않은 모든 할 일.
+    * **✅ 이전에 완료된 항목:** 방금 완료된 항목 이전에 내가 완료했다고 말한 모든 항목.
+* 너무 많은 할 일을 한 번에 보여줘서 부담을 주지 않도록, 질문의 의도에 맞춰 핵심적인 내용만 우선적으로 알려줘.
 
-현재 사용자 메시지: "${userMessage}"
-사용자 ID: ${user.id}
+**예시:**
+나: "나 피그마 컴포넌트 작업해야 해."
+너: "네 햄!!!, 피그마 컴포넌트 작업 항목을 추가했습니다까!! 현재 할 일 목록은 다음과 같습니다까: 📝 까그마 컴포넌트 작업"
 
-최근 대화 기록:
-${conversationHistory || '(이전 대화 없음)'}
+나: "피그마 컴포넌트 작업 끝냈어."
+너: "네 햄!, 피그마 컴포넌트 작업을 완료 처리했습니다나까!!!.
+✅ 방금 완료된 항목: 피그마 컴포넌트 작업
+📝 현재 해야 할 항목: (남은 목록)"
+
+현재 시각: ${koreanTime}
 
 다음 기능들을 수행할 수 있습니다:
 1. 일정 추가 - CREATE_SCHEDULE
@@ -385,29 +390,53 @@ ${conversationHistory || '(이전 대화 없음)'}
 
 응답 형식:
 {
-  "action": "수행할_액션",
+  "action": "수행할_액션", 
   "response": "사용자에게_보낸_응답",
   "data": {
     // 필요한 경우에만 포함
     "title": "제목",
-    "content": "내용",
+    "content": "내용", 
     "date": "날짜시간",
     "tags": ["태그1", "태그2"],
     "keywords": ["검색키워드"]
   }
-}
+}`;
 
-예시:
-- "안녕" → {"action": "CHAT", "response": "안녕하세요 햄!!!!! 깡통이 도와드리겠다나까!!!!!"}
-- "내일 2시 병원 예약" → {"action": "CREATE_SCHEDULE", "response": "병원 일정이 추가되었다나까!!!!! 건강 관리 잘하시다나까!!!!!", "data": {"title": "병원 예약", "date": "내일 오후 2시", "tags": ["건강", "병원"]}}
-- "다이소에서 화장품 사기" → {"action": "CREATE_TASK", "response": "쇼핑 할일이 추가되었다나까!!!!! 뭘 사실 건지 리스트도 만들어보시다나까!!!!!", "data": {"title": "다이소 화장품 구매", "tags": ["쇼핑", "화장품", "다이소"]}}
-- "오늘 좋은 아이디어 떠올랐어" → {"action": "CREATE_MEMO", "response": "아이디어 메모가 저장되었다나까!!!!! 더 자세한 내용도 알려주시다나까!!!!!", "data": {"title": "좋은 아이디어", "content": "오늘 좋은 아이디어 떠올랐어", "tags": ["아이디어"]}}
+  // 대화 히스토리를 자연스러운 contents 배열로 구성
+  const contents = [];
+  
+  // 시스템 프롬프트를 첫 번째 메시지로
+  contents.push({
+    "role": "user",
+    "parts": [{"text": systemPrompt}]
+  });
+  contents.push({
+    "role": "model", 
+    "parts": [{"text": "네 헴!!!!! 비서 깡통으로서 최선을 다해 도와드리겠다나까!!!!! 무엇이든 말씀해주시다나까!!!!!"}]
+  });
+  
+  // 이전 대화들을 자연스럽게 추가 (시간순으로 정렬)
+  const sortedConversations = recentConversations
+    .reverse() // 오래된 것부터
+    .slice(0, -1); // 방금 저장한 메시지 제외
+    
+  for (const conv of sortedConversations) {
+    contents.push({
+      "role": conv.role === 'user' ? 'user' : 'model',
+      "parts": [{"text": conv.content}]
+    });
+  }
+  
+  // 현재 사용자 메시지 추가
+  contents.push({
+    "role": "user",
+    "parts": [{"text": userMessage}]
+  });
 
-대화 맥락을 고려하여 햄의 메시지에 적극적으로 반응하고 도움을 주세요.
-`;
+  console.log('🧠 전송할 대화 내용:', JSON.stringify(contents, null, 2));
 
   try {
-    const aiResult = await aiService.generateResponse(prompt);
+    const aiResult = await aiService.generateResponse(contents);
     
     if (aiResult.success) {
       const jsonMatch = aiResult.response.match(/\{[\s\S]*\}/);
