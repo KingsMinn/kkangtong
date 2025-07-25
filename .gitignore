@@ -1,0 +1,103 @@
+# 의존성
+/node_modules
+/.pnp
+.pnp.js
+
+# 환경변수 및 설정 파일
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# 로그 파일
+/logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# 캐시 디렉토리
+.npm
+.eslintcache
+.cache/
+
+# 커버리지 디렉토리
+coverage/
+*.lcov
+
+# 빌드 디렉토리
+dist/
+build/
+
+# Docker 관련
+docker-compose.override.yml
+.dockerignore
+
+# 데이터베이스 파일
+*.sqlite
+*.sqlite3
+*.db
+
+# 개발 데이터
+/dev-data
+/uploads
+/temp
+
+# OS별 파일
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE 및 에디터
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Temporary files
+*.tmp
+*.temp
+
+# SSL 인증서
+*.pem
+*.key
+*.crt
+/ssl
+
+# 백업 파일
+*.bak
+*.backup
+
+# 프로세스 관리자
+.pm2/
+
+# 기타
+.nyc_output
+.grunt
+
+# MacOS
+.AppleDouble
+.LSOverride
+
+# Windows
+desktop.ini
+
+# Linux
+*~
+
+# 프로젝트별 제외 파일
+/init-scripts/*.sql
+!/init-scripts/example.sql

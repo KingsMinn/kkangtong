@@ -1,0 +1,133 @@
+version: "3.8"
+
+services:
+  # Discord Secretary Bot
+  secretary-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: discord-secretary-bot
+    environment:
+      - NODE_ENV=production
+      - TZ=Asia/Seoul
+    env_file:
+      - .env
+    volumes:
+      # 로그 파일 저장용 (필요시)
+      - ./logs:/app/logs
+      # 첨부파일 저장용 (필요시)
+      - ./uploads:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - secretary-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # PostgreSQL 데이터베이스
+  postgres:
+    image: postgres:15-alpine
+    container_name: discord-secretary-db
+    environment:
+      POSTGRES_DB: ${DB_NAME:-discord_secretary}
+      POSTGRES_USER: ${DB_USER:-secretary_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --locale=C"
+      TZ: Asia/Seoul
+    volumes:
+      # 데이터 영구 저장
+      - postgres_data:/var/lib/postgresql/data
+      # 초기화 스크립트 (필요시)
+      - ./init-scripts:/docker-entrypoint-initdb.d
+    ports:
+      # 외부에서 DB 접근이 필요한 경우 (개발용)
+      - "5432:5432"
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${DB_USER:-secretary_user} -d ${DB_NAME:-discord_secretary}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - secretary-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Redis (캐싱용, 선택사항)
+  redis:
+    image: redis:7-alpine
+    container_name: discord-secretary-cache
+    environment:
+      - TZ=Asia/Seoul
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - secretary-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Nginx (리버스 프록시, 선택사항)
+  nginx:
+    image: nginx:alpine
+    container_name: discord-secretary-proxy
+    environment:
+      - TZ=Asia/Seoul
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - secretary-bot
+    restart: unless-stopped
+    networks:
+      - secretary-network
+    profiles:
+      - production # docker-compose --profile production up 으로 실행
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# 네트워크 설정
+networks:
+  secretary-network:
+    driver: bridge
+    name: secretary-network
+
+# 볼륨 설정
+volumes:
+  postgres_data:
+    driver: local
+    name: secretary-postgres-data
+  redis_data:
+    driver: local
+    name: secretary-redis-data
+# 개발용 오버라이드 설정
+# docker-compose -f docker-compose.yml -f docker-compose.dev.yml up

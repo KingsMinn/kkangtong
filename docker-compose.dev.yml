@@ -1,0 +1,61 @@
+version: "3.8"
+
+# 개발용 오버라이드 설정
+# 사용법: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+services:
+  secretary-bot:
+    # 개발용 설정으로 오버라이드
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development # 멀티스테이지 빌드 사용시
+    environment:
+      - NODE_ENV=development # 개발 모드
+      - DEBUG=* # 디버그 로그 활성화
+    volumes:
+      # 소스 코드 마운트로 핫 리로드
+      - .:/app
+      - /app/node_modules # node_modules 제외
+    command: npm run dev # nodemon 사용
+    ports:
+      # 디버깅 포트 노출
+      - "9229:9229"
+    # 개발시에는 restart 정책 완화
+    restart: "no"
+
+  postgres:
+    # 개발용 포트 노출
+    ports:
+      - "5432:5432"
+    environment:
+      # 개발용 설정
+      POSTGRES_DB: discord_secretary_dev
+      POSTGRES_USER: dev_user
+      POSTGRES_PASSWORD: dev_password
+    # 개발용 볼륨 (로컬 디렉토리 마운트)
+    volumes:
+      - ./dev-data/postgres:/var/lib/postgresql/data
+      - ./init-scripts:/docker-entrypoint-initdb.d
+
+  redis:
+    # 개발용 설정
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./dev-data/redis:/data
+
+# 개발용 볼륨 (선택사항)
+volumes:
+  postgres_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./dev-data/postgres
+  redis_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./dev-data/redis
